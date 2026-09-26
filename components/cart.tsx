@@ -1,0 +1,19 @@
+"use client";
+import {createContext,useContext,useEffect,useState,type ReactNode} from "react";
+import {Sheet,SheetContent,SheetTitle,SheetDescription} from "@/components/ui/sheet";
+import {products,assetImage,whatsapp,SITE_ORIGIN} from "@/lib/catalog";
+type CartItems=Record<string,number>;
+type CartContextValue={count:number;add:(slug:string)=>void;open:()=>void};
+const CartContext=createContext<CartContextValue>({count:0,add:()=>{},open:()=>{}});
+export const useCart=()=>useContext(CartContext);
+export function CartButton(){const cart=useCart();return <button className="icon-button bag-button" aria-label={`Open cart, ${cart.count} items`} onClick={cart.open}><img className="icon" src="/assets/bag.svg" alt="" width="24" height="24"/>{cart.count>0&&<span className="bag-count">{cart.count}</span>}</button>}
+export function CartProvider({children}:{children:ReactNode}){
+ const [items,setItems]=useState<CartItems>({});const [ready,setReady]=useState(false);const [isOpen,setOpen]=useState(false);
+ useEffect(()=>{try{const saved=sessionStorage.getItem("apkina-cart");if(saved){const parsed=JSON.parse(saved);if(parsed&&typeof parsed==="object"&&!Array.isArray(parsed)){const clean:CartItems={};for(const p of products){const q=parsed[p.slug];if(Number.isInteger(q)&&q>0&&q<=99)clean[p.slug]=q;}setItems(clean);}}}catch{}setReady(true)},[]);
+ useEffect(()=>{if(ready)try{sessionStorage.setItem("apkina-cart",JSON.stringify(items));sessionStorage.removeItem("apkina-bag-draft")}catch{}},[items,ready]);
+ const count=Object.values(items).reduce((a,b)=>a+b,0);const lines=products.filter(p=>items[p.slug]);
+ const update=(slug:string,q:number)=>setItems(old=>{const next={...old};if(q<=0)delete next[slug];else next[slug]=Math.min(99,q);return next});
+ const add=(slug:string)=>{if(!products.some(p=>p.slug===slug))return;setItems(old=>({...old,[slug]:Math.min(99,(old[slug]||0)+1)}));setOpen(true)};
+ const orderUrl=whatsapp(`Hello Apkina! I'd like to order:\n\n${lines.map(p=>`Product: ${p.name}\nQuantity: ${items[p.slug]}\nProduct image: ${SITE_ORIGIN}${assetImage(p.image)}\nProduct page: ${SITE_ORIGIN}/products/${p.slug}`).join("\n\n")}\n\nPlease confirm the current prices, availability and delivery options.`);
+ return <CartContext.Provider value={{count,add,open:()=>setOpen(true)}}>{children}<Sheet open={isOpen} onOpenChange={setOpen}><SheetContent className="cart-sheet"><SheetTitle>Your cart ({count})</SheetTitle><SheetDescription>Your next creation starts here.</SheetDescription>{!count?<div className="empty-bag"><img className="icon" src="/assets/bag.svg" alt=""/><h3>Your cart is waiting</h3><p>Find the missing piece for your content.</p><a className="pill dark" href="/shop" onClick={()=>setOpen(false)}>Explore Products</a></div>:<><div className="cart-lines">{lines.map(p=><article className="cart-item" key={p.slug}><img src={assetImage(p.image)} alt={p.name} width="100" height="110"/><div><h3><a href={`/products/${p.slug}`} onClick={()=>setOpen(false)}>{p.name}</a></h3><p>Ask for current pricing</p><div className="quantity-control"><button aria-label={`Decrease ${p.name} quantity`} onClick={()=>update(p.slug,items[p.slug]-1)}>−</button><output aria-live="polite">{items[p.slug]}</output><button aria-label={`Increase ${p.name} quantity`} disabled={items[p.slug]>=99} onClick={()=>update(p.slug,items[p.slug]+1)}>+</button></div><button className="text-button" aria-label={`Remove ${p.name}`} onClick={()=>update(p.slug,0)}>Remove</button></div></article>)}</div><div className="cart-total"><p><span>Total</span><strong>Confirm with our team</strong></p><p className="cart-note">Our team will confirm current pricing, availability, delivery and your final total.</p><a className="pill dark" href={orderUrl} target="_blank" rel="noopener noreferrer">Order via WhatsApp</a><p className="email-note">Your draft includes each product’s name, image link and quantity.</p></div></>}</SheetContent></Sheet></CartContext.Provider>;
+}
